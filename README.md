@@ -5,7 +5,9 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
 基于弗洛伊德心理动力学（力比多/攻击性）的智能情绪模拟系统，让你的 AstrBot 拥有会生气、会吃醋、会自我怀疑的真实灵魂。
-**！使用AI辅助制作！** `(AI：？！高！？)`
+**！使用AI辅助制作！** 
+`(AI：？！高！？)`
+
 ---
 
 ## ✨ 特性
