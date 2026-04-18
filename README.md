@@ -1,6 +1,4 @@
-好的，以下是为该插件编写的 `README.md` 文档，可直接放入项目根目录。
 
-```markdown
 # 🧠 AstrBot 弗洛伊德双驱情绪管理插件
 
 [![AstrBot](https://img.shields.io/badge/AstrBot-v4.5.7+-blue)](https://github.com/Soulter/AstrBot)
