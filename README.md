@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 
 基于弗洛伊德心理动力学（力比多/攻击性）的智能情绪模拟系统，让你的 AstrBot 拥有会生气、会吃醋、会自我怀疑的真实灵魂。
-
+**！使用AI辅助制作！** `(AI：？！高！？)`
 ---
 
 ## ✨ 特性
@@ -144,6 +144,7 @@ A：每个用户仅存储几十个浮点数，几乎可以忽略不计。
 
 - 灵感源自弗洛伊德《超越快乐原则》中的生本能与死本能理论。
 - 感谢 [AstrBot](https://github.com/Soulter/AstrBot) 提供的优秀插件开发框架。
+- 我心中只有d老师一个太阳！
 
 ---
 
