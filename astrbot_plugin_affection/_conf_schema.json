@@ -1,0 +1,60 @@
+{
+  "default_full_affection_uids": {
+    "description": "默认满好感用户 UID 列表（用英文逗号分隔）",
+    "type": "string",
+    "default": "",
+    "hint": "例如: 123456,789012。这些用户好感度初始为 100。"
+  },
+  "modify_sensitivity": {
+    "description": "情绪变化敏感度 (0-100)，越高单次变化越大",
+    "type": "int",
+    "default": 30,
+    "hint": "影响每次对话后的数值增量系数。"
+  },
+  "unconscious_llm": {
+    "description": "潜意识 LLM 配置",
+    "type": "object",
+    "items": {
+      "provider_id": {
+        "description": "LLM 提供商 ID（留空则使用当前会话默认）",
+        "type": "string",
+        "default": ""
+      },
+      "api_key": {
+        "description": "API Key（若提供商需要）",
+        "type": "string",
+        "default": ""
+      },
+      "api_base": {
+        "description": "API Base URL（可选）",
+        "type": "string",
+        "default": ""
+      },
+      "model": {
+        "description": "模型名称",
+        "type": "string",
+        "default": "gpt-3.5-turbo"
+      },
+      "context_length": {
+        "description": "每次调用传入的历史消息条数",
+        "type": "int",
+        "default": 5
+      }
+    }
+  },
+  "idle_check_enabled": {
+    "description": "是否启用长时间未互动检测",
+    "type": "bool",
+    "default": true
+  },
+  "idle_threshold_hours": {
+    "description": "触发空闲分析的最短未互动小时数",
+    "type": "float",
+    "default": 6.0
+  },
+  "debug_mode": {
+    "description": "调试模式（开启后会在日志中显示详细数值变化）",
+    "type": "bool",
+    "default": false
+  }
+}
