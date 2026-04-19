@@ -1,7 +1,7 @@
 # 🧠 AstrBot 弗洛伊德双驱情绪管理插件
 
 [![AstrBot](https://img.shields.io/badge/AstrBot-v4.5.7+-blue)](https://github.com/Soulter/AstrBot)
-[![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL%20v3-blue)](./LICENSE)
 
 > **⚠️ 免责声明**  
 > 本项目代码**主要由 AI 生成**，开发者仅进行需求描述、代码审阅与逻辑校验。  
@@ -143,7 +143,7 @@ A：每个用户仅存储几十个浮点数，几乎可以忽略不计。
 
 ## 📜 开源协议
 
-本项目采用 [MIT License](./LICENSE) 开源。
+本项目采用 [GNU Affero General Public License v3.0](./LICENSE) (AGPL-3.0) 开源。
 
 ---
 
