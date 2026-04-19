@@ -1,15 +1,45 @@
 {
   "default_full_affection_uids": {
-    "description": "默认满好感用户 UID 列表（用英文逗号分隔）",
+    "description": "默认满好感（100）的用户 UID，多个用英文逗号分隔",
     "type": "string",
     "default": "",
-    "hint": "例如: 123456,789012。这些用户好感度初始为 100。"
+    "hint": "例如: 123456,789012"
   },
   "modify_sensitivity": {
     "description": "情绪变化敏感度 (0-100)，越高单次变化越大",
     "type": "int",
     "default": 30,
     "hint": "影响每次对话后的数值增量系数。"
+  },
+  "initial_affection": {
+    "description": "新用户的初始好感度 (0-100)",
+    "type": "int",
+    "default": 50,
+    "hint": "创建新用户时的默认好感度。"
+  },
+  "initial_libido_other": {
+    "description": "新用户的初始他力比多基线值 (0-50)",
+    "type": "int",
+    "default": 25,
+    "hint": "创建新用户时的默认对他力比多基线。"
+  },
+  "initial_aggression_other": {
+    "description": "新用户的初始他攻击性基线值 (0-50)",
+    "type": "int",
+    "default": 25,
+    "hint": "创建新用户时的默认对他攻击性基线。"
+  },
+  "initial_libido_self": {
+    "description": "机器人的初始自力比多基线值 (0-50)",
+    "type": "int",
+    "default": 25,
+    "hint": "首次启动时机器人的默认自力比多基线。"
+  },
+  "initial_aggression_self": {
+    "description": "机器人的初始自攻击性基线值 (0-50)",
+    "type": "int",
+    "default": 25,
+    "hint": "首次启动时机器人的默认自攻击性基线。"
   },
   "unconscious_llm": {
     "description": "潜意识 LLM 配置",
@@ -53,7 +83,7 @@
     "default": 6.0
   },
   "debug_mode": {
-    "description": "调试模式（开启后会在日志中显示详细数值变化）",
+    "description": "调试模式",
     "type": "bool",
     "default": false
   }
