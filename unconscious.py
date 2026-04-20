@@ -1,6 +1,6 @@
 """
 潜意识 LLM 调用模块
-负责分析用户消息并返回情绪数值的调整建议，包括当前值增量和基线值增量。
+负责分析用户消息并返回情绪数值的调整建议，包括当前值增量、基线值增量和场景强度。
 """
 
 import json
@@ -17,7 +17,9 @@ class UnconsciousAdjuster:
         self.config = config
         self.self_storage = self_storage
 
-    async def analyze_and_adjust(self, event: AstrMessageEvent, current_data: dict, turn_count: int) -> dict:
+    async def analyze_and_adjust(
+        self, event: AstrMessageEvent, current_data: dict, turn_count: int
+    ) -> dict:
         conv_mgr = self.context.conversation_manager
         umo = event.unified_msg_origin
         curr_cid = await conv_mgr.get_curr_conversation_id(umo)
@@ -25,18 +27,22 @@ class UnconsciousAdjuster:
         history_text = conversation.history if conversation else ""
 
         self_data = self.self_storage.get()
-        prompt = self._build_prompt(current_data, self_data, history_text, event.message_str, turn_count)
+        prompt = self._build_prompt(
+            current_data, self_data, history_text, event.message_str, turn_count
+        )
         llm_config = self.config.get("unconscious_llm", {})
         provider_id = llm_config.get("provider_id")
         if not provider_id:
-            provider_id = await self.context.get_current_chat_provider_id(event.unified_msg_origin)
+            provider_id = await self.context.get_current_chat_provider_id(
+                event.unified_msg_origin
+            )
 
         try:
             resp = await self.context.llm_generate(
                 chat_provider_id=provider_id,
                 prompt=prompt,
                 contexts=[],
-                system_prompt="你是一个情绪数值调节器，只输出 JSON，不添加任何解释。"
+                system_prompt="你是一个情绪数值调节器，只输出 JSON，不添加任何解释。",
             )
             text = resp.completion_text
             logger.debug(f"[Unconscious] LLM 原始返回: {text}")
@@ -59,14 +65,21 @@ class UnconsciousAdjuster:
                 chat_provider_id=provider_id,
                 prompt=prompt,
                 contexts=[],
-                system_prompt="你是一个情绪数值调节器，只输出 JSON。"
+                system_prompt="你是一个情绪数值调节器，只输出 JSON。",
             )
             text = resp.completion_text
             return self._parse_json(text)
         except Exception:
             return None
 
-    def _build_prompt(self, user_data: dict, self_data: dict, history: str, latest_msg: str, turn_count: int) -> str:
+    def _build_prompt(
+        self,
+        user_data: dict,
+        self_data: dict,
+        history: str,
+        latest_msg: str,
+        turn_count: int,
+    ) -> str:
         history_snippet = history[-2000:] if len(history) > 2000 else history
         return f"""
 你是潜意识的数值调节器。根据用户最新消息和对话历史，分析对机器人情绪的影响。
@@ -80,6 +93,11 @@ class UnconsciousAdjuster:
      * 若 turn_count > 10，基线变化必须极小（增量范围 -0.2 ~ +0.2），因为初印象已形成。
    - 对自身的基线（原自力比多/原自攻击性）：始终很难改变，增量范围 -0.2 ~ +0.2。
 4. 好感度变化范围 -0.5 ~ +0.5。
+5. **场景强度识别**：判断当前对话场景的情感强度：
+   - 高强度（2.0）：生死离别、深爱表白、极度崇拜、仇恨爆发、自毁倾诉、重大牺牲
+   - 中强度（1.0）：普通争执、日常关心、轻度调侃、常规互动
+   - 低强度（0.5）：寒暄、中性闲聊、无关话题、简单应答
+   输出 `intensity` 字段。
 
 **情绪解读指南（务必遵循）**：
 - 用户表达喜爱、关心、赞美、感谢、不舍、祝福 → 他力比多 ↑，攻击性 ↓
@@ -92,11 +110,11 @@ class UnconsciousAdjuster:
 
 当前状态：
 - 对话轮次：第 {turn_count} 轮
-- 好感度：{user_data['affection']:.1f}/100
-- 对他基线：原他力比多 {user_data['base_libido_other']:.1f}，原他攻击性 {user_data['base_aggression_other']:.1f}
-- 对他当前：他力比多 {user_data['current_libido_other']:.1f}，他攻击性 {user_data['current_aggression_other']:.1f}
-- 对己基线：原自力比多 {self_data['base_libido_self']:.1f}，原自攻击性 {self_data['base_aggression_self']:.1f}
-- 对己当前：自力比多 {self_data['current_libido_self']:.1f}，自攻击性 {self_data['current_aggression_self']:.1f}
+- 好感度：{user_data["affection"]:.1f}/100
+- 对他基线：原他力比多 {user_data["base_libido_other"]:.1f}，原他攻击性 {user_data["base_aggression_other"]:.1f}
+- 对他当前：他力比多 {user_data["current_libido_other"]:.1f}，他攻击性 {user_data["current_aggression_other"]:.1f}
+- 对己基线：原自力比多 {self_data["base_libido_self"]:.1f}，原自攻击性 {self_data["base_aggression_self"]:.1f}
+- 对己当前：自力比多 {self_data["current_libido_self"]:.1f}，自攻击性 {self_data["current_aggression_self"]:.1f}
 
 最近对话历史：
 {history_snippet}
@@ -113,7 +131,8 @@ class UnconsciousAdjuster:
   "base_libido_other_delta": 0.0,  // 对他原力比多增量（范围见规则）
   "base_aggression_other_delta": 0.0,
   "base_libido_self_delta": 0.0,   // 对己原力比多增量（范围 -0.2~0.2）
-  "base_aggression_self_delta": 0.0
+  "base_aggression_self_delta": 0.0,
+  "intensity": 1.0                 // 场景强度：0.5（低）/1.0（中）/2.0（高）
 }}
 
 只输出 JSON，不要其他文字。
@@ -138,7 +157,7 @@ class UnconsciousAdjuster:
         try:
             return json.loads(text.strip())
         except Exception:
-            match = re.search(r'\{.*\}', text, re.DOTALL)
+            match = re.search(r"\{.*\}", text, re.DOTALL)
             if match:
                 try:
                     return json.loads(match.group())
@@ -148,23 +167,54 @@ class UnconsciousAdjuster:
 
     def _clamp_deltas(self, data: dict, turn_count: int) -> dict:
         clamped = {}
-        clamped["libido_other_delta"] = max(-2.0, min(2.0, data.get("libido_other_delta", 0.0)))
-        clamped["aggression_other_delta"] = max(-2.0, min(2.0, data.get("aggression_other_delta", 0.0)))
-        clamped["libido_self_delta"] = max(-2.0, min(2.0, data.get("libido_self_delta", 0.0)))
-        clamped["aggression_self_delta"] = max(-2.0, min(2.0, data.get("aggression_self_delta", 0.0)))
-        clamped["affection_delta"] = max(-0.5, min(0.5, data.get("affection_delta", 0.0)))
+        clamped["libido_other_delta"] = max(
+            -2.0, min(2.0, data.get("libido_other_delta", 0.0))
+        )
+        clamped["aggression_other_delta"] = max(
+            -2.0, min(2.0, data.get("aggression_other_delta", 0.0))
+        )
+        clamped["libido_self_delta"] = max(
+            -2.0, min(2.0, data.get("libido_self_delta", 0.0))
+        )
+        clamped["aggression_self_delta"] = max(
+            -2.0, min(2.0, data.get("aggression_self_delta", 0.0))
+        )
+        clamped["affection_delta"] = max(
+            -0.5, min(0.5, data.get("affection_delta", 0.0))
+        )
 
         if turn_count <= 10:
-            clamped["base_libido_other_delta"] = max(-1.5, min(1.5, data.get("base_libido_other_delta", 0.0)))
-            clamped["base_aggression_other_delta"] = max(-1.5, min(1.5, data.get("base_aggression_other_delta", 0.0)))
+            clamped["base_libido_other_delta"] = max(
+                -1.5, min(1.5, data.get("base_libido_other_delta", 0.0))
+            )
+            clamped["base_aggression_other_delta"] = max(
+                -1.5, min(1.5, data.get("base_aggression_other_delta", 0.0))
+            )
         else:
-            clamped["base_libido_other_delta"] = max(-0.2, min(0.2, data.get("base_libido_other_delta", 0.0)))
-            clamped["base_aggression_other_delta"] = max(-0.2, min(0.2, data.get("base_aggression_other_delta", 0.0)))
-        clamped["base_libido_self_delta"] = max(-0.2, min(0.2, data.get("base_libido_self_delta", 0.0)))
-        clamped["base_aggression_self_delta"] = max(-0.2, min(0.2, data.get("base_aggression_self_delta", 0.0)))
+            clamped["base_libido_other_delta"] = max(
+                -0.2, min(0.2, data.get("base_libido_other_delta", 0.0))
+            )
+            clamped["base_aggression_other_delta"] = max(
+                -0.2, min(0.2, data.get("base_aggression_other_delta", 0.0))
+            )
+        clamped["base_libido_self_delta"] = max(
+            -0.2, min(0.2, data.get("base_libido_self_delta", 0.0))
+        )
+        clamped["base_aggression_self_delta"] = max(
+            -0.2, min(0.2, data.get("base_aggression_self_delta", 0.0))
+        )
+
+        # 强度系数裁剪（确保在 0.5~2.0 之间）
+        intensity = data.get("intensity", 1.0)
+        try:
+            intensity = float(intensity)
+        except Exception:
+            intensity = 1.0
+        clamped["intensity"] = max(0.5, min(2.0, intensity))
         return clamped
 
     def _ensure_non_zero_current_deltas(self, deltas: dict, data: dict) -> dict:
+        """确保对他当前力比多/攻击性的增量不为零。若为零，根据好感度趋势赋予微小增量。"""
         for key in ["libido_other_delta", "aggression_other_delta"]:
             if abs(deltas.get(key, 0.0)) < 0.001:
                 affection = data.get("affection", 50.0)
@@ -187,4 +237,5 @@ class UnconsciousAdjuster:
             "base_aggression_other_delta": 0.0,
             "base_libido_self_delta": 0.0,
             "base_aggression_self_delta": 0.0,
+            "intensity": 1.0,
         }

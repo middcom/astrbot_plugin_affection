@@ -9,7 +9,9 @@ from typing import Optional
 from astrbot.api import logger
 
 
-def compute_decay(elapsed_hours: float, initial_deviation: float, duration_hours: float) -> float:
+def compute_decay(
+    elapsed_hours: float, initial_deviation: float, duration_hours: float
+) -> float:
     """
     计算应向基线恢复的修正增量 delta。
 
@@ -32,7 +34,7 @@ def compute_decay(elapsed_hours: float, initial_deviation: float, duration_hours
     if elapsed_hours >= duration_hours:
         return -initial_deviation
     ratio = elapsed_hours / duration_hours
-    decay_amount = initial_deviation * (ratio ** 2)
+    decay_amount = initial_deviation * (ratio**2)
     return -decay_amount
 
 
@@ -113,10 +115,11 @@ class DecayManager:
 
             # 空闲检测
             idle_threshold = self.config.get("idle_threshold_hours", 6.0)
-            if (elapsed_hours >= idle_threshold and
-                self.config.get("idle_check_enabled", True) and
-                not user.get("idle_triggered", False)):
-
+            if (
+                elapsed_hours >= idle_threshold
+                and self.config.get("idle_check_enabled", True)
+                and not user.get("idle_triggered", False)
+            ):
                 await self._trigger_idle_analysis(uid, elapsed_hours)
                 user["idle_triggered"] = True
                 self.storage.update_user(uid, {"idle_triggered": True})
@@ -148,20 +151,50 @@ class DecayManager:
                 self.storage.save_user(uid, user)
 
     async def _trigger_idle_analysis(self, uid: str, elapsed_hours: float):
-        logger.info(f"[DecayManager] 用户 {uid} 空闲 {elapsed_hours:.1f}h，触发空闲分析")
+        logger.info(
+            f"[DecayManager] 用户 {uid} 空闲 {elapsed_hours:.1f}h，触发空闲分析"
+        )
         try:
             deltas = await self.unconscious.analyze_idle(uid, elapsed_hours)
             if deltas:
                 user = self.storage.get(uid)
                 sensitivity = 0.3
-                user["current_libido_other"] = max(0.0, min(50.0, user["current_libido_other"] + deltas.get("libido_other_delta", 0.0) * sensitivity))
-                user["current_aggression_other"] = max(0.0, min(50.0, user["current_aggression_other"] + deltas.get("aggression_other_delta", 0.0) * sensitivity))
+                user["current_libido_other"] = max(
+                    0.0,
+                    min(
+                        50.0,
+                        user["current_libido_other"]
+                        + deltas.get("libido_other_delta", 0.0) * sensitivity,
+                    ),
+                )
+                user["current_aggression_other"] = max(
+                    0.0,
+                    min(
+                        50.0,
+                        user["current_aggression_other"]
+                        + deltas.get("aggression_other_delta", 0.0) * sensitivity,
+                    ),
+                )
                 self.storage.save_user(uid, user)
                 # 自身数据也可能因空闲受影响（但通常较小，此处可选择性更新）
                 self_data = self.self_storage.get()
                 if self_data:
-                    self_data["current_libido_self"] = max(0.0, min(50.0, self_data["current_libido_self"] + deltas.get("libido_self_delta", 0.0) * sensitivity))
-                    self_data["current_aggression_self"] = max(0.0, min(50.0, self_data["current_aggression_self"] + deltas.get("aggression_self_delta", 0.0) * sensitivity))
+                    self_data["current_libido_self"] = max(
+                        0.0,
+                        min(
+                            50.0,
+                            self_data["current_libido_self"]
+                            + deltas.get("libido_self_delta", 0.0) * sensitivity,
+                        ),
+                    )
+                    self_data["current_aggression_self"] = max(
+                        0.0,
+                        min(
+                            50.0,
+                            self_data["current_aggression_self"]
+                            + deltas.get("aggression_self_delta", 0.0) * sensitivity,
+                        ),
+                    )
                     self.self_storage.save(self_data)
         except Exception as e:
             logger.error(f"[DecayManager] 空闲分析失败: {e}")
