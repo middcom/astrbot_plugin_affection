@@ -7,13 +7,12 @@ AstrBot 插件：弗洛伊德双驱情绪管理
 import asyncio
 import shutil
 import time
-from pathlib import Path
+import traceback
 from typing import Dict
 
 from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star, register, StarTools
 from astrbot.api import logger, AstrBotConfig
-from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from .storage import UserDataStorage, SelfDataStorage
 from .unconscious import UnconsciousAdjuster
@@ -80,7 +79,7 @@ EMOTION_REFERENCE_TABLE = """
 """
 
 
-@register("eros_thanatos", "Soulter", "弗洛伊德双驱情绪管理插件", "2.3.0")
+@register("astrbot_plugin_affection", "middcom,dream,deepseek", "弗洛伊德双驱情绪管理插件", "v1.2")
 class ErosThanatosPlugin(Star):
     """
     弗洛伊德双驱情绪管理插件主类
@@ -93,9 +92,7 @@ class ErosThanatosPlugin(Star):
         self.config = config
 
         # 基础数据目录
-        self.base_data_path = (
-            Path(get_astrbot_data_path()) / "plugin_data" / "eros_thanatos"
-        )
+        self.base_data_path = StarTools.get_data_dir()
         self.base_data_path.mkdir(parents=True, exist_ok=True)
 
         # 缓存每个机器人的存储实例和衰减管理器
@@ -248,7 +245,11 @@ class ErosThanatosPlugin(Star):
         # 仅追加一行提示，引导 LLM 遵循人设中的规则
         reminder = "（请根据上述数值和你在人设中定义的「情绪驱动规则」来演绎角色，不要提及数值。）"
 
-        req.system_prompt += "\n\n" + values_text + reminder
+        emotion_prompt = values_text + reminder
+        if req.system_prompt:
+            req.system_prompt += "\n\n" + emotion_prompt
+        else:
+            req.system_prompt = emotion_prompt
 
         if self.config.get("debug_mode"):
             logger.info(
@@ -416,7 +417,7 @@ class ErosThanatosPlugin(Star):
                 )
 
         except Exception as e:
-            logger.error(f"[ErosThanatos] 机器人 {bot_id} 用户 {uid} 更新失败: {e}")
+            logger.error(f"[ErosThanatos] 机器人 {bot_id} 用户 {uid} 更新失败: {e}\n{traceback.format_exc()}")
 
     # ---------- 用户指令 ----------
     @filter.command("mystatus")

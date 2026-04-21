@@ -91,7 +91,7 @@ class DecayManager:
                 deviation = current - base
                 if abs(deviation) < 0.001:
                     continue
-                duration = 2.0
+                duration = self.config.get("decay_duration_hours", 2.0)
                 delta = compute_decay(elapsed_hours_self, deviation, duration)
                 new_val = current + delta
                 new_val = max(0.0, min(50.0, new_val))
@@ -138,7 +138,7 @@ class DecayManager:
                 deviation = current - base
                 if abs(deviation) < 0.001:
                     continue
-                duration = 2.0
+                duration = self.config.get("decay_duration_hours", 2.0)
                 delta = compute_decay(elapsed_user, deviation, duration)
                 new_val = current + delta
                 new_val = max(0.0, min(50.0, new_val))
