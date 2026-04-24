@@ -10,6 +10,8 @@ from copy import deepcopy
 import asyncio
 import time
 
+from astrbot.api import logger
+
 
 class SelfDataStorage:
     """机器人自身情绪数据存储器（每个机器人独立）"""
@@ -24,7 +26,11 @@ class SelfDataStorage:
             try:
                 with open(self.file_path, "r", encoding="utf-8") as f:
                     return json.load(f)
-            except Exception:
+            except json.JSONDecodeError as e:
+                logger.warning(f"[SelfDataStorage] JSON 解析失败 {self.file_path}: {e}")
+                return {}
+            except Exception as e:
+                logger.warning(f"[SelfDataStorage] 文件读取失败 {self.file_path}: {e}")
                 return {}
         return {}
 
@@ -34,7 +40,7 @@ class SelfDataStorage:
 
     async def async_save(self):
         async with self._lock:
-            self._save()
+            await asyncio.to_thread(self._save)
 
     def get(self) -> dict:
         return deepcopy(self.data)
@@ -81,7 +87,11 @@ class UserDataStorage:
             try:
                 with open(self.file_path, "r", encoding="utf-8") as f:
                     return json.load(f)
-            except Exception:
+            except json.JSONDecodeError as e:
+                logger.warning(f"[UserDataStorage] JSON 解析失败 {self.file_path}: {e}")
+                return {}
+            except Exception as e:
+                logger.warning(f"[UserDataStorage] 文件读取失败 {self.file_path}: {e}")
                 return {}
         return {}
 
@@ -91,7 +101,7 @@ class UserDataStorage:
 
     async def async_save(self):
         async with self._lock:
-            self._save()
+            await asyncio.to_thread(self._save)
 
     def _migrate_old_data(self):
         """将旧版用户数据中的自身字段迁移到全局自身存储"""

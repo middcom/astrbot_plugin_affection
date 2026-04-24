@@ -49,28 +49,14 @@
         "description": "LLM 提供商 ID（留空则使用当前会话默认）",
         "type": "string",
         "default": ""
-      },
-      "api_key": {
-        "description": "API Key（若提供商需要）",
-        "type": "string",
-        "default": ""
-      },
-      "api_base": {
-        "description": "API Base URL（可选）",
-        "type": "string",
-        "default": ""
-      },
-      "model": {
-        "description": "模型名称",
-        "type": "string",
-        "default": "gpt-3.5-turbo"
-      },
-      "context_length": {
-        "description": "每次调用传入的历史消息条数",
-        "type": "int",
-        "default": 5
       }
     }
+  },
+  "decay_duration_hours": {
+    "description": "情绪衰减周期（小时）",
+    "type": "float",
+    "default": 2.0,
+    "hint": "当前情绪值回归基线所需的时间。数值越大，情绪变化持续越久。"
   },
   "idle_check_enabled": {
     "description": "是否启用长时间未互动检测",
