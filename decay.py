@@ -5,7 +5,7 @@
 
 import asyncio
 import time
-from typing import Optional
+
 from astrbot.api import logger
 
 
@@ -52,7 +52,7 @@ class DecayManager:
         self.unconscious = unconscious_adjuster
         self.context = context
         self.config = config
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
 
     async def start(self):
         if self._task is None:

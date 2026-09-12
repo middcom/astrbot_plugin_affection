@@ -3,12 +3,12 @@
 支持多机器人数据隔离，每个机器人拥有独立的数据目录。
 """
 
-import json
-from pathlib import Path
-from typing import Dict, Optional, Any
-from copy import deepcopy
 import asyncio
+import json
 import time
+from copy import deepcopy
+from pathlib import Path
+from typing import Any
 
 from astrbot.api import logger
 
@@ -19,7 +19,7 @@ class SelfDataStorage:
     def __init__(self, file_path: Path):
         self.file_path = file_path
         self._lock = asyncio.Lock()
-        self.data: Dict[str, Any] = self._load()
+        self.data: dict[str, Any] = self._load()
 
     def _load(self) -> dict:
         if self.file_path.exists():
@@ -79,7 +79,7 @@ class UserDataStorage:
         self.file_path = file_path
         self._lock = asyncio.Lock()
         self.self_storage = self_storage
-        self.data: Dict[str, dict] = self._load()
+        self.data: dict[str, dict] = self._load()
         self._migrate_old_data()
 
     def _load(self) -> dict:
@@ -130,7 +130,7 @@ class UserDataStorage:
                     user.pop(key, None)
             self._save()
 
-    def get(self, uid: str) -> Optional[dict]:
+    def get(self, uid: str) -> dict | None:
         user = self.data.get(uid)
         return deepcopy(user) if user else None
 

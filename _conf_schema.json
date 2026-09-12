@@ -11,6 +11,12 @@
     "default": 30,
     "hint": "影响每次对话后的数值增量系数。"
   },
+  "emotion_lock_turns": {
+    "description": "情绪提示锁定轮数",
+    "type": "int",
+    "default": 5,
+    "hint": "在此轮数内复用同一份情绪提示文本，降低 KV Cache 失效频率。设为 1 则每轮都更新。"
+  },
   "initial_affection": {
     "description": "新用户的初始好感度 (0-100)",
     "type": "int",

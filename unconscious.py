@@ -5,7 +5,7 @@
 
 import json
 import re
-from typing import Dict, Optional
+
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 from astrbot.core.conversation_mgr import Conversation
@@ -54,7 +54,7 @@ class UnconsciousAdjuster:
             logger.error(f"[Unconscious] LLM 调用失败: {e}")
             return self._default_response()
 
-    async def analyze_idle(self, uid: str, elapsed_hours: float) -> Optional[dict]:
+    async def analyze_idle(self, uid: str, elapsed_hours: float) -> dict | None:
         prompt = self._build_idle_prompt(elapsed_hours)
         llm_config = self.config.get("unconscious_llm", {})
         provider_id = llm_config.get("provider_id")
@@ -81,32 +81,35 @@ class UnconsciousAdjuster:
         turn_count: int,
     ) -> str:
         history_snippet = history[-2000:] if len(history) > 2000 else history
-        return f"""
-你是潜意识的数值调节器。根据用户最新消息和对话历史，分析对机器人情绪的影响。
+        return f"""你是潜意识的数值调节器。根据用户最新消息和对话历史，分析对机器人情绪的影响。
 
 **重要规则**：
-1. 必须对“他力比多”和“他攻击性”的**当前值**给出非零的调整增量（即使是很小的 ±0.1），因为每次互动都会引起情绪波动。
-2. 对“自力比多”和“自攻击性”的当前值也建议给出非零增量，除非对话完全中性。
-3. 同时评估本次互动是否影响**长期印象（基线值）**：
+1. 必须对"他力比多"和"他攻击性"的当前值给出调整增量（允许零值 0.0），增量方向必须符合消息情感。
+2. 增量方向必须与消息情感严格一致：
+   - 纯友善/关心/赞美/感谢 → 他力比多正增量，攻击性负增量或零，绝不升正。
+   - 批评/指责/冷漠/拒绝/贬低 → 他力比多负增量，攻击性正增量。
+   - 悲伤/无助/自我否定 → 他力比多正增量（安慰欲），攻击性负增量；除非用户攻击机器人则攻击性正增量。
+   - 调侃/玩笑无恶意 → 他力比多微升或持平，攻击性微升（+0.05~+0.1）。
+   - 长时间未互动且无合理理由（如白天无故消失）→ 攻击性正增量（微恼），他力比多负增量。
+   - 道别但语气温暖、表达美好祝愿 → 他力比多大幅正增量，攻击性大幅负增量。
+3. 同时评估本次互动是否影响长期印象（基线值）：
    - 对他人的基线（原他力比多/原他攻击性）：当前是第 {turn_count} 轮对话。
      * 若 turn_count <= 10，基线变化可以较明显（增量范围 -1.5 ~ +1.5）。
      * 若 turn_count > 10，基线变化必须极小（增量范围 -0.2 ~ +0.2），因为初印象已形成。
    - 对自身的基线（原自力比多/原自攻击性）：始终很难改变，增量范围 -0.2 ~ +0.2。
 4. 好感度变化范围 -0.5 ~ +0.5。
-5. **场景强度识别**：判断当前对话场景的情感强度：
+5. 场景强度识别（intensity 字段）：
    - 高强度（2.0）：生死离别、深爱表白、极度崇拜、仇恨爆发、自毁倾诉、重大牺牲
-   - 中强度（1.0）：普通争执、日常关心、轻度调侃、常规互动
+   - 中强度（1.0）：普通争执、日常关心、常规互动
    - 低强度（0.5）：寒暄、中性闲聊、无关话题、简单应答
-   输出 `intensity` 字段。
 
-**情绪解读指南（务必遵循）**：
-- 用户表达喜爱、关心、赞美、感谢、不舍、祝福 → 他力比多 ↑，攻击性 ↓
-- 用户表达批评、指责、冷漠、拒绝、贬低 → 他力比多 ↓，攻击性 ↑
-- 用户表达悲伤、无助、自我否定 → 他力比多 ↑（安慰欲），但若用户攻击机器人则攻击性 ↑
-- 用户长时间未互动且无合理理由（如白天无故消失）→ 攻击性 ↑（微恼），力比多 ↓
-- 用户道别但语气温暖、表达美好祝愿 → 他力比多 ↑↑，攻击性 ↓↓
-- 用户调侃、玩笑但无恶意 → 他力比多可能微降，攻击性微升（傲娇反应）
-- 对自身：获得正面反馈时自力比多 ↑，被否定或自省时自攻击性 ↑
+**常见消息类型与推荐增量（参考）**：
+- "你好"/"在吗" → 中性闲聊，intensity=0.5，增量 ≈ 0.0
+- "你还好吗？"/"加油"/"谢谢你" → 纯友善，他力比多 +0.3~+0.8，他攻击性 -0.1~0.0
+- "你真聪明"/"好厉害" → 赞美，他力比多 +0.5~+1.0，他攻击性 0.0~-0.2
+- "你今天怎么不说话" → 关心，他力比多 +0.2~+0.5，他攻击性 0.0
+- "你笨死了"/"滚" → 批评，他力比多 -0.5~-1.5，他攻击性 +0.3~+1.0
+- "哈哈你好好笑" → 调侃，他力比多 +0.1~+0.3，他攻击性 +0.05~+0.15
 
 当前状态：
 - 对话轮次：第 {turn_count} 轮
@@ -121,34 +124,33 @@ class UnconsciousAdjuster:
 
 用户最新消息：{latest_msg}
 
-请输出 JSON 格式：
+请输出 JSON 格式（仅输出 JSON，不要任何其他文字或解释）：
 {{
-  "libido_other_delta": 0.0,       // 必须非零，范围 -2.0~2.0
-  "aggression_other_delta": 0.0,   // 必须非零，范围 -2.0~2.0
-  "libido_self_delta": 0.0,        // 建议非零，范围 -2.0~2.0
-  "aggression_self_delta": 0.0,    // 建议非零，范围 -2.0~2.0
-  "affection_delta": 0.0,          // 范围 -0.5~0.5
-  "base_libido_other_delta": 0.0,  // 对他原力比多增量（范围见规则）
+  "libido_other_delta": 0.0,
+  "aggression_other_delta": 0.0,
+  "libido_self_delta": 0.0,
+  "aggression_self_delta": 0.0,
+  "affection_delta": 0.0,
+  "base_libido_other_delta": 0.0,
   "base_aggression_other_delta": 0.0,
-  "base_libido_self_delta": 0.0,   // 对己原力比多增量（范围 -0.2~0.2）
+  "base_libido_self_delta": 0.0,
   "base_aggression_self_delta": 0.0,
-  "intensity": 1.0                 // 场景强度：0.5（低）/1.0（中）/2.0（高）
+  "intensity": 1.0
 }}
-
-只输出 JSON，不要其他文字。
 """
 
     def _build_idle_prompt(self, elapsed_hours: float) -> str:
-        return f"""
-用户已经 {elapsed_hours:.1f} 小时没有和机器人互动了。请分析这种情况是否会让机器人产生情绪波动。
-例如：若是深夜睡觉时间，则无影响；若是白天无故消失，可能产生轻微不满。
-输出 JSON 格式：
+        return f"""用户已经 {elapsed_hours:.1f} 小时没有和机器人互动了。请分析这种情况是否会让机器人产生情绪波动。
+例如：若是深夜睡觉时间则无影响；若是白天无故消失可能产生轻微不满。
+
+输出 JSON 格式（仅输出 JSON，不要任何其他文字）：
 {{
   "libido_other_delta": 0.0,
   "aggression_other_delta": 0.0,
   "libido_self_delta": 0.0,
   "aggression_self_delta": 0.0
 }}
+
 增量范围 -1.0 ~ 1.0。
 """
 
@@ -197,6 +199,7 @@ class UnconsciousAdjuster:
             clamped["base_aggression_other_delta"] = max(
                 -0.2, min(0.2, data.get("base_aggression_other_delta", 0.0))
             )
+
         clamped["base_libido_self_delta"] = max(
             -0.2, min(0.2, data.get("base_libido_self_delta", 0.0))
         )
@@ -204,7 +207,6 @@ class UnconsciousAdjuster:
             -0.2, min(0.2, data.get("base_aggression_self_delta", 0.0))
         )
 
-        # 强度系数裁剪（确保在 0.5~2.0 之间）
         intensity = data.get("intensity", 1.0)
         try:
             intensity = float(intensity)
@@ -214,19 +216,23 @@ class UnconsciousAdjuster:
         return clamped
 
     def _ensure_non_zero_current_deltas(self, deltas: dict, data: dict) -> dict:
-        """确保对他当前力比多/攻击性的增量不为零。若为零，根据好感度趋势赋予微小增量。"""
+        """
+        若 LLM 返回的力比多/攻击性增量为零，赋予微小增量避免全零。
+        方向依据好感度趋势：高好感偏正向，低好感偏负向。
+        注意：仅在 LLM 未给出方向时使用，不覆盖 LLM 明确给出的非零值。
+        """
         for key in ["libido_other_delta", "aggression_other_delta"]:
             if abs(deltas.get(key, 0.0)) < 0.001:
                 affection = data.get("affection", 50.0)
                 if affection > 60:
-                    deltas[key] = 0.1
-                elif affection < 40:
-                    deltas[key] = -0.1
-                else:
                     deltas[key] = 0.05
+                elif affection < 40:
+                    deltas[key] = -0.05
+                else:
+                    deltas[key] = 0.02
         return deltas
 
-    def _default_response(self):
+    def _default_response(self) -> dict:
         return {
             "libido_other_delta": 0.05,
             "aggression_other_delta": 0.05,
