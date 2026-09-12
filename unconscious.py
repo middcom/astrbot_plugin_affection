@@ -169,20 +169,21 @@ class UnconsciousAdjuster:
 
     def _clamp_deltas(self, data: dict, turn_count: int) -> dict:
         clamped = {}
+        # 缩减钳制范围，防止 LLM 返回极端 delta 导致情绪暴涨暴跌
         clamped["libido_other_delta"] = max(
-            -2.0, min(2.0, data.get("libido_other_delta", 0.0))
+            -1.0, min(1.0, data.get("libido_other_delta", 0.0))
         )
         clamped["aggression_other_delta"] = max(
-            -2.0, min(2.0, data.get("aggression_other_delta", 0.0))
+            -1.0, min(1.0, data.get("aggression_other_delta", 0.0))
         )
         clamped["libido_self_delta"] = max(
-            -2.0, min(2.0, data.get("libido_self_delta", 0.0))
+            -1.0, min(1.0, data.get("libido_self_delta", 0.0))
         )
         clamped["aggression_self_delta"] = max(
-            -2.0, min(2.0, data.get("aggression_self_delta", 0.0))
+            -1.0, min(1.0, data.get("aggression_self_delta", 0.0))
         )
         clamped["affection_delta"] = max(
-            -0.5, min(0.5, data.get("affection_delta", 0.0))
+            -1.0, min(1.0, data.get("affection_delta", 0.0))
         )
 
         if turn_count <= 10:

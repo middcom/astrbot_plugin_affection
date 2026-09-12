@@ -64,38 +64,47 @@ def run_unconscious_update(
                     f"[affection] 机器人 {bot_id} 用户 {uid} 场景强度: {intensity}, 有效敏感度: {sensitivity:.2f}"
                 )
 
-            # 更新用户当前值
+            # 更新用户当前值（带变化速率限制）
+            # clamp 签名: clamp(value, lo, hi)
+            # 单轮最大变化幅度：力比多/攻击性 ±3.0，好感 ±5.0
+            max_delta_libido = 3.0
+            max_delta_aggression = 3.0
+            max_delta_affection = 5.0
+
+            libido_change = clamp(deltas["libido_other_delta"] * sensitivity, -max_delta_libido, max_delta_libido)
             user_data["current_libido_other"] = clamp(
+                user_data["current_libido_other"] + libido_change,
                 0.0,
                 50.0,
-                user_data["current_libido_other"]
-                + deltas["libido_other_delta"] * sensitivity,
             )
+
+            agg_change = clamp(deltas["aggression_other_delta"] * sensitivity, -max_delta_aggression, max_delta_aggression)
             user_data["current_aggression_other"] = clamp(
+                user_data["current_aggression_other"] + agg_change,
                 0.0,
                 50.0,
-                user_data["current_aggression_other"]
-                + deltas["aggression_other_delta"] * sensitivity,
             )
+
+            aff_change = clamp(deltas["affection_delta"] * sensitivity, -max_delta_affection, max_delta_affection)
             user_data["affection"] = clamp(
+                user_data["affection"] + aff_change,
                 0.0,
                 100.0,
-                user_data["affection"] + deltas["affection_delta"] * sensitivity,
             )
 
             # 基线值（初印象规则）
             base_coef_other = 1.0 if turn <= 10 else 0.2
             user_data["base_libido_other"] = clamp(
-                0.0,
-                50.0,
                 user_data["base_libido_other"]
                 + deltas.get("base_libido_other_delta", 0.0) * base_coef_other,
-            )
-            user_data["base_aggression_other"] = clamp(
                 0.0,
                 50.0,
+            )
+            user_data["base_aggression_other"] = clamp(
                 user_data["base_aggression_other"]
                 + deltas.get("base_aggression_other_delta", 0.0) * base_coef_other,
+                0.0,
+                50.0,
             )
 
             user_data["turn_count"] = turn + 1
@@ -107,28 +116,28 @@ def run_unconscious_update(
             # 更新自身数据
             self_data = self_storage.get()
             self_data["current_libido_self"] = clamp(
-                0.0,
-                50.0,
                 self_data["current_libido_self"]
                 + deltas["libido_self_delta"] * sensitivity,
+                0.0,
+                50.0,
             )
             self_data["current_aggression_self"] = clamp(
-                0.0,
-                50.0,
                 self_data["current_aggression_self"]
                 + deltas["aggression_self_delta"] * sensitivity,
+                0.0,
+                50.0,
             )
             self_data["base_libido_self"] = clamp(
-                0.0,
-                50.0,
                 self_data["base_libido_self"]
                 + deltas.get("base_libido_self_delta", 0.0) * 0.2,
-            )
-            self_data["base_aggression_self"] = clamp(
                 0.0,
                 50.0,
+            )
+            self_data["base_aggression_self"] = clamp(
                 self_data["base_aggression_self"]
                 + deltas.get("base_aggression_self_delta", 0.0) * 0.2,
+                0.0,
+                50.0,
             )
             self_data["last_update"] = now
             self_storage.save(self_data)

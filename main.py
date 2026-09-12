@@ -255,28 +255,33 @@ class AffectionPlugin(Star):
             self_data["current_aggression_self"],
         )
 
-        # 情绪锁定轮次：同一批情绪提示复用 N 轮
+        # 情绪锁定轮次：同一批情绪提示复用 N 轮，降低 KV Cache 失效频率
         lock_turns = int(self.config.get("emotion_lock_turns", 5))
         current_turn = user_data.get("turn_count", 1)
         last_turn = self._emotion_lock_tracker.get(uid, 0)
 
+        injected = False
         if current_turn - last_turn >= lock_turns:
-            emotion_prompt = self._build_emotion_prompt(emotion_desc)
+            emotion_prompt = self._build_emotion_prompt(
+                emotion_desc,
+                base_libido=user_data.get("base_libido_other", 25.0),
+                base_aggression=user_data.get("base_aggression_other", 25.0),
+                base_libido_self=self_data.get("base_libido_self", 25.0),
+                base_aggression_self=self_data.get("base_aggression_self", 25.0),
+            )
             self._emotion_lock_tracker[uid] = current_turn
-        else:
-            emotion_prompt = None  # 复用旧的
-
-        if emotion_prompt is None:
-            emotion_prompt = self._build_emotion_prompt(emotion_desc)
-            self._emotion_lock_tracker[uid] = current_turn
-
-        self._inject_emotion_content(req, emotion_prompt)
+            self._inject_emotion_content(req, emotion_prompt)
+            injected = True
 
         if self.config.get("debug_mode"):
+            status = "已注入" if injected else "锁定跳过"
             logger.info(
-                f"[affection] 机器人 {bot_id} 注入情绪标签到 {uid} (turn={current_turn}):\n"
-                f"  对他: {emotion_desc['towards_user']}\n"
-                f"  自身: {emotion_desc['self_state']}"
+                f"[affection] 机器人 {bot_id} 情绪标签到 {uid} (turn={current_turn}，{status}):\n"
+                f"  对他: {emotion_desc['towards_user']} "
+                f"(他力{emotion_desc['libido_other']:.1f}/他攻{emotion_desc['aggression_other']:.1f})\n"
+                f"  自身: {emotion_desc['self_state']} "
+                f"(自力{emotion_desc['libido_self']:.1f}/自攻{emotion_desc['aggression_self']:.1f})\n"
+                f"  好感: {emotion_desc['affection']:.1f}"
             )
 
     @filter.on_waiting_llm_request(priority=10)
@@ -456,13 +461,59 @@ class AffectionPlugin(Star):
         return []
 
     @staticmethod
-    def _build_emotion_prompt(emotion_desc: dict) -> str:
-        """构建简洁的情绪提示文本（仅粗粒度标签）"""
+    def _build_emotion_prompt(
+        emotion_desc: dict,
+        base_libido: float = 25.0,
+        base_aggression: float = 25.0,
+        base_libido_self: float = 25.0,
+        base_aggression_self: float = 25.0,
+    ) -> str:
+        """
+        构建情绪提示文本（混合标签 + 插值区间 + 数值面板）。
+        - 标签采用线性插值，显示"标签A(x%)/标签B(y%)"格式
+        - 附带当前数值和基线值，让 LLM 理解相对变化
+        - 显示插值区间，让角色明确知道自己落在哪两个标签之间
+        """
+        # 构建对他情绪标签（包含插值区间信息）
+        towards_info = emotion_desc.get("towards_info", {})
+        towards_parts = [f"对你（{emotion_desc['towards_user']}）"]
+        if towards_info:
+            if "labels" in towards_info:
+                towards_parts[-1] += f" [{towards_info['labels']}]"
+            if "lib_range" in towards_info:
+                towards_parts[-1] += (
+                    f" (他力区间:{towards_info['lib_range']}/他攻区间:{towards_info['agg_range']})"
+                )
+
+        # 构建自身情绪标签
+        self_info = emotion_desc.get("self_info", {})
+        self_parts = [f"自身状态（{emotion_desc['self_state']}）"]
+        if self_info:
+            if "labels" in self_info:
+                self_parts[-1] += f" [{self_info['labels']}]"
+            if "lib_range" in self_info:
+                self_parts[-1] += (
+                    f" (自力区间:{self_info['lib_range']}/自攻区间:{self_info['agg_range']})"
+                )
+
+        # 基线与当前对比
+        lib_other_delta = emotion_desc["libido_other"] - base_libido
+        agg_other_delta = emotion_desc["aggression_other"] - base_aggression
+        lib_self_delta = emotion_desc["libido_self"] - base_libido_self
+        agg_self_delta = emotion_desc["aggression_self"] - base_aggression_self
+
+        delta_sign = lambda v: "↑" if v > 0.1 else ("↓" if v < -0.1 else "→")
+
         return (
             f"【当前情绪状态】\n"
-            f"对你（{emotion_desc['towards_user']}）：他力比多偏高 / 他攻击性偏高\n"
-            f"自身状态（{emotion_desc['self_state']}）：自力比多偏高 / 自攻击性偏高\n"
-            f"请根据上述情绪状态来演绎角色，不要提及任何数值。"
+            f"{towards_parts[0]}\n"
+            f"{self_parts[0]}\n"
+            f"【数值参考】好感 {emotion_desc['affection']:.1f}/100 | "
+            f"他力比多 {emotion_desc['libido_other']:.1f} 基线{base_libido:.1f}({delta_sign(lib_other_delta)}{abs(lib_other_delta):.1f}) / "
+            f"他攻击性 {emotion_desc['aggression_other']:.1f} 基线{base_aggression:.1f}({delta_sign(agg_other_delta)}{abs(agg_other_delta):.1f}) | "
+            f"自力比多 {emotion_desc['libido_self']:.1f} 基线{base_libido_self:.1f}({delta_sign(lib_self_delta)}{abs(lib_self_delta):.1f}) / "
+            f"自攻击性 {emotion_desc['aggression_self']:.1f} 基线{base_aggression_self:.1f}({delta_sign(agg_self_delta)}{abs(agg_self_delta):.1f})\n"
+            f"请根据上述状态演绎角色，不要提及任何数值。"
         )
 
     @staticmethod

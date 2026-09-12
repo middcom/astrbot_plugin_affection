@@ -1,9 +1,29 @@
-def _map_value_to_bracket(value: float) -> float:
-    brackets = [0.0, 12.5, 25.0, 37.5, 50.0]
-    for b in brackets:
-        if value <= b:
-            return b
-    return 50.0
+"""
+情绪标签映射表 + 线性插值混合标签计算。
+
+核心设计：
+- 基础档位（brackets）：0 / 12.5 / 25 / 37.5 / 50
+- 当数值恰好落在档位上时，返回单一标签
+- 当数值落在两个档位之间时，返回线性插值混合标签，例如：
+    - 他力比多 18.0（12.5 与 25 之间，占 60%）
+      → "好感(60%)/竞争(40%)" 或 "好感/竞争（偏向好感）"
+
+插值策略（简化版双线性插值）：
+1. 找到 libido 的上下档位及权重
+2. 找到 aggression 的上下档位及权重
+3. 取出 4 个角标签，按双线性权重混合
+"""
+
+
+# ====================================================================
+# 基础档位
+# ====================================================================
+
+BRACKETS = [0.0, 12.5, 25.0, 37.5, 50.0]
+
+# ====================================================================
+# 好感度分档
+# ====================================================================
 
 
 def _get_affection_level(affection: float) -> int:
@@ -18,6 +38,60 @@ def _get_affection_level(affection: float) -> int:
     else:
         return 100
 
+
+# ====================================================================
+# 档位查找
+# ====================================================================
+
+
+def _find_bracket_info(value: float) -> tuple:
+    """
+    找到 value 所在的档位区间。
+    如果恰好等于某档位，返回 (val, val, 0.0, 0.0)
+    如果在两档之间，返回 (lower, upper, lower_weight, upper_weight)
+    """
+    for i in range(len(BRACKETS)):
+        b = BRACKETS[i]
+        if value <= b:
+            if value == b:
+                return (b, b, 1.0, 0.0)
+            if i == 0:
+                return (b, b, 1.0, 0.0)
+            lower = BRACKETS[i - 1]
+            upper = b
+            gap = upper - lower
+            if gap == 0:
+                return (upper, upper, 1.0, 0.0)
+            upper_weight = (value - lower) / gap  # 0~1
+            return (lower, upper, 1.0 - upper_weight, upper_weight)
+    # 超过最大值
+    last = BRACKETS[-1]
+    return (last, last, 1.0, 0.0)
+
+
+def _format_blend(label1: str, pct1: int, label2: str, pct2: int) -> str:
+    """格式化混合标签"""
+    pct1 = max(0, min(100, pct1))
+    pct2 = 100 - pct1
+    # 标签完全相同时直接返回
+    if label1 == label2:
+        return label1
+    if pct1 < 15:
+        return f"{label2}（偏{label1}）"
+    elif pct1 > 85:
+        return f"{label1}（偏{label2}）"
+    elif pct1 >= 40 and pct2 >= 40:
+        # 差距不大，显示百分比
+        return f"{label1}({pct1}%)/{label2}({pct2}%)"
+    elif pct1 >= pct2:
+        return f"{label1}（偏{label2}）"
+    else:
+        return f"{label2}（偏{label1}）"
+
+
+# ====================================================================
+# 情绪映射表
+# ====================================================================
 
 TOWARDS_USER_TABLE = {
     0: {
@@ -157,7 +231,6 @@ TOWARDS_USER_TABLE = {
     },
 }
 
-
 SELF_TABLE = {
     (50.0, 0.0): "自恋",
     (50.0, 12.5): "自满",
@@ -187,6 +260,124 @@ SELF_TABLE = {
 }
 
 
+# ====================================================================
+# 核心查询函数
+# ====================================================================
+
+
+def _bilinear_interpolate(table: dict, lib_val: float, agg_val: float) -> str:
+    """
+    双线性插值：根据 lib 和 agg 各自的档位权重，对 4 个角的标签进行加权混合。
+    """
+    lib_info = _find_bracket_info(lib_val)
+    agg_info = _find_bracket_info(agg_val)
+
+    lib_lower, lib_upper, w_lib_lower, w_lib_upper = lib_info
+    agg_lower, agg_upper, w_agg_lower, w_agg_upper = agg_info
+
+    # 获取 4 个角标签
+    corners = [
+        (table.get((lib_lower, agg_lower), ""), w_lib_lower * w_agg_lower),
+        (table.get((lib_lower, agg_upper), ""), w_lib_lower * w_agg_upper),
+        (table.get((lib_upper, agg_lower), ""), w_lib_upper * w_agg_lower),
+        (table.get((lib_upper, agg_upper), ""), w_lib_upper * w_agg_upper),
+    ]
+
+    # 过滤掉空标签
+    valid = [(label, weight) for label, weight in corners if label]
+
+    if not valid:
+        return "平淡"
+
+    if len(valid) == 1:
+        return valid[0][0]
+
+    # 归一化权重
+    total_weight = sum(w for _, w in valid)
+    if total_weight > 0:
+        valid = [(label, weight / total_weight) for label, weight in valid]
+
+    if len(valid) == 2:
+        valid.sort(key=lambda x: x[1], reverse=True)
+        label1, pct1 = valid[0]
+        label2, _ = valid[1]
+        pct1 = int(pct1 * 100)
+        return _format_blend(label1, pct1, label2, 100 - pct1)
+
+    # 3-4 个有效角，取权重最高的两个
+    valid.sort(key=lambda x: x[1], reverse=True)
+    label1, pct1 = valid[0]
+    label2, _ = valid[1]
+    pct1 = int(pct1 * 100)
+    return _format_blend(label1, pct1, label2, 100 - pct1)
+
+
+def _get_interpolated_towards_user(
+    libido: float, aggression: float, aff_level: int
+) -> tuple:
+    """
+    对他力比多和攻击性进行双线性插值，返回 (混合标签, 插值信息字典)。
+    插值信息包含：lower_label, upper_label, weights 等，方便调试和显示。
+    """
+    table = TOWARDS_USER_TABLE.get(aff_level, {})
+    if not table:
+        return ("未知情感(好感档缺失)", {})
+
+    interpolated = _bilinear_interpolate_with_info(table, libido, aggression)
+    return interpolated
+
+
+def _bilinear_interpolate_with_info(
+    table: dict, lib_val: float, agg_val: float
+) -> tuple:
+    """
+    双线性插值，返回 (标签, 插值信息)。
+    插值信息包含角标签和权重，用于外部展示。
+    """
+    lib_info = _find_bracket_info(lib_val)
+    agg_info = _find_bracket_info(agg_val)
+
+    lib_lower, lib_upper, w_lib_lower, w_lib_upper = lib_info
+    agg_lower, agg_upper, w_agg_lower, w_agg_upper = agg_info
+
+    corners = [
+        (table.get((lib_lower, agg_lower), ""), w_lib_lower * w_agg_lower),
+        (table.get((lib_lower, agg_upper), ""), w_lib_lower * w_agg_upper),
+        (table.get((lib_upper, agg_lower), ""), w_lib_upper * w_agg_lower),
+        (table.get((lib_upper, agg_upper), ""), w_lib_upper * w_agg_upper),
+    ]
+
+    valid = [(label, weight) for label, weight in corners if label]
+
+    if not valid:
+        return ("平淡", {"info": "无匹配标签"})
+
+    if len(valid) == 1:
+        return (valid[0][0], {"info": f"{valid[0][0]} (精确匹配)"})
+
+    total_weight = sum(w for _, w in valid)
+    if total_weight > 0:
+        valid = [(label, weight / total_weight) for label, weight in valid]
+
+    valid.sort(key=lambda x: x[1], reverse=True)
+    label1, pct1 = valid[0]
+    label2, _ = valid[1]
+    pct1 = int(pct1 * 100)
+
+    info = {
+        "labels": f"{label1}({pct1}%)/{label2}({100 - pct1}%)",
+        "lib_range": f"{lib_lower}-{lib_upper}",
+        "agg_range": f"{agg_lower}-{agg_upper}",
+    }
+
+    return (_format_blend(label1, pct1, label2, 100 - pct1), info)
+
+
+def _get_interpolated_self_state(libido: float, aggression: float) -> tuple:
+    """对自我状态进行双线性插值，返回 (标签, 插值信息)"""
+    return _bilinear_interpolate_with_info(SELF_TABLE, libido, aggression)
+
+
 def get_emotion_description(
     affection: float,
     libido_other: float,
@@ -194,18 +385,25 @@ def get_emotion_description(
     libido_self: float,
     aggression_self: float,
 ) -> dict:
+    """
+    返回混合情绪标签和原始数值，供 LLM 精确判断。
+    包含插值区间信息，让角色明确知道自己落在哪两个标签之间。
+    """
     aff_level = _get_affection_level(affection)
-    lo_b = _map_value_to_bracket(libido_other)
-    ao_b = _map_value_to_bracket(aggression_other)
-    ls_b = _map_value_to_bracket(libido_self)
-    as_b = _map_value_to_bracket(aggression_self)
+    towards_user, towards_info = _get_interpolated_towards_user(
+        libido_other, aggression_other, aff_level
+    )
+    self_state, self_info = _get_interpolated_self_state(libido_self, aggression_self)
 
-    towards_user = TOWARDS_USER_TABLE.get(aff_level, {}).get((lo_b, ao_b))
-    if towards_user is None:
-        towards_user = f"未知情感(好感{aff_level},他力{lo_b},他攻{ao_b})"
-
-    self_state = SELF_TABLE.get((ls_b, as_b))
-    if self_state is None:
-        self_state = f"未知状态(自力{ls_b},自攻{as_b})"
-
-    return {"towards_user": towards_user, "self_state": self_state}
+    return {
+        "towards_user": towards_user,
+        "self_state": self_state,
+        "towards_info": towards_info,
+        "self_info": self_info,
+        "affection": round(affection, 2),
+        "libido_other": round(libido_other, 2),
+        "aggression_other": round(aggression_other, 2),
+        "libido_self": round(libido_self, 2),
+        "aggression_self": round(aggression_self, 2),
+        "aff_level": aff_level,
+    }
