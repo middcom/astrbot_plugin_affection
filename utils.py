@@ -57,6 +57,11 @@ def run_unconscious_update(
 
             base_sensitivity = config.get("modify_sensitivity", 30) / 100.0
             intensity = deltas.get("intensity", 1.0)
+            try:
+                intensity = float(intensity)
+            except (TypeError, ValueError):
+                # intensity 缺失或非法时按标准场景强度处理
+                intensity = 1.0
             sensitivity = base_sensitivity * intensity
 
             if config.get("debug_mode"):
@@ -67,25 +72,38 @@ def run_unconscious_update(
             # 更新用户当前值（带变化速率限制）
             # clamp 签名: clamp(value, lo, hi)
             # 单轮最大变化幅度：力比多/攻击性 ±3.0，好感 ±5.0
+            # 增量一律用 .get 兜底：LLM 返回缺字段时按 0 处理，避免 KeyError 导致整轮失败
             max_delta_libido = 3.0
             max_delta_aggression = 3.0
             max_delta_affection = 5.0
 
-            libido_change = clamp(deltas["libido_other_delta"] * sensitivity, -max_delta_libido, max_delta_libido)
+            libido_change = clamp(
+                deltas.get("libido_other_delta", 0.0) * sensitivity,
+                -max_delta_libido,
+                max_delta_libido,
+            )
             user_data["current_libido_other"] = clamp(
                 user_data["current_libido_other"] + libido_change,
                 0.0,
                 50.0,
             )
 
-            agg_change = clamp(deltas["aggression_other_delta"] * sensitivity, -max_delta_aggression, max_delta_aggression)
+            agg_change = clamp(
+                deltas.get("aggression_other_delta", 0.0) * sensitivity,
+                -max_delta_aggression,
+                max_delta_aggression,
+            )
             user_data["current_aggression_other"] = clamp(
                 user_data["current_aggression_other"] + agg_change,
                 0.0,
                 50.0,
             )
 
-            aff_change = clamp(deltas["affection_delta"] * sensitivity, -max_delta_affection, max_delta_affection)
+            aff_change = clamp(
+                deltas.get("affection_delta", 0.0) * sensitivity,
+                -max_delta_affection,
+                max_delta_affection,
+            )
             user_data["affection"] = clamp(
                 user_data["affection"] + aff_change,
                 0.0,
@@ -113,17 +131,17 @@ def run_unconscious_update(
             user_data["idle_triggered"] = False
             user_storage.save_user(uid, user_data)
 
-            # 更新自身数据
+            # 更新自身数据（同样用 .get 兜底，缺字段按 0 处理）
             self_data = self_storage.get()
             self_data["current_libido_self"] = clamp(
                 self_data["current_libido_self"]
-                + deltas["libido_self_delta"] * sensitivity,
+                + deltas.get("libido_self_delta", 0.0) * sensitivity,
                 0.0,
                 50.0,
             )
             self_data["current_aggression_self"] = clamp(
                 self_data["current_aggression_self"]
-                + deltas["aggression_self_delta"] * sensitivity,
+                + deltas.get("aggression_self_delta", 0.0) * sensitivity,
                 0.0,
                 50.0,
             )
