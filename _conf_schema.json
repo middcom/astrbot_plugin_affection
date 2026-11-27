@@ -8,8 +8,8 @@
   "modify_sensitivity": {
     "description": "情绪变化敏感度 (0-100)，越高单次变化越大",
     "type": "int",
-    "default": 30,
-    "hint": "影响每次对话后的数值增量系数。"
+    "default": 100,
+    "hint": "影响每次对话后的数值增量系数。默认 100 让友善互动产生可见的好感变化；已保存的旧配置不会自动更新，需要手动修改。"
   },
   "emotion_lock_turns": {
     "description": "情绪提示锁定轮数",
